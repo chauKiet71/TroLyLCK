@@ -200,6 +200,44 @@ class Database:
         )
         return [self._to_result(row) for row in rows]
 
+    async def get_memory(
+        self, telegram_user_id: int, memory_id: UUID
+    ) -> SearchResult | None:
+        rows = await self._fetchall(
+            """
+            SELECT m.*, COALESCE(m.text_content, m.caption, m.title, '') AS snippet,
+                   0.0 AS score
+            FROM memories m
+            WHERE telegram_user_id = %s AND id = %s AND searchable = TRUE
+            """,
+            (telegram_user_id, memory_id),
+        )
+        return self._to_result(rows[0]) if rows else None
+
+    async def delete_memory_tree(self, telegram_user_id: int, memory_id: UUID) -> list[str]:
+        rows = await self._fetchall(
+            """
+            WITH RECURSIVE targets AS (
+                SELECT id
+                FROM memories
+                WHERE id = %s AND telegram_user_id = %s
+                UNION ALL
+                SELECT child.id
+                FROM memories child
+                JOIN targets parent ON child.parent_id = parent.id
+                WHERE child.telegram_user_id = %s
+            ), deleted AS (
+                DELETE FROM memories memory
+                USING targets
+                WHERE memory.id = targets.id
+                RETURNING memory.storage_path
+            )
+            SELECT storage_path FROM deleted WHERE storage_path IS NOT NULL
+            """,
+            (memory_id, telegram_user_id, telegram_user_id),
+        )
+        return [row["storage_path"] for row in rows]
+
     async def _execute(self, query: str, params: Sequence[Any]) -> None:
         async with self.pool.connection() as connection:
             await connection.execute(query, params)

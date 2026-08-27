@@ -10,6 +10,8 @@ Trợ lý Telegram cá nhân có thể ghi nhớ tin nhắn, hình ảnh, tài l
 - Trích xuất nội dung PDF, DOCX, XLSX/XLSM, PPTX, TXT, Markdown, CSV, JSON, HTML và một số định dạng văn bản khác.
 - Lưu và gửi lại document, photo, audio, video, voice, animation, video note và sticker.
 - Tìm kiếm kết hợp `pgvector` (ngữ nghĩa) và PostgreSQL full-text/keyword.
+- Tìm và xóa từng mục bằng `/forget` với hai bước chọn và xác nhận; bản sao file cục bộ
+  liên quan cũng được dọn an toàn.
 - Tự chạy migration idempotent khi khởi động: extension, bảng, cột và index còn thiếu sẽ được tạo.
 - Cô lập dữ liệu theo Telegram user ID.
 
@@ -69,6 +71,7 @@ Bot đang dùng long polling, vì vậy không cần domain hay webhook cho MVP.
 - Hỏi `Hình như tôi có báo cáo tài chính tháng 8 đúng không?` → bot trả lời và gửi lại file phù hợp.
 - `/find báo cáo tài chính tháng 8` → buộc tìm kiếm, bỏ qua bước phân loại ý định.
 - `/recent` → xem 10 mục gần nhất.
+- `/forget báo cáo tài chính tháng 8` → chọn một kết quả rồi xác nhận trước khi xóa vĩnh viễn.
 
 ## Chạy bằng Docker
 
@@ -91,4 +94,4 @@ ruff check .
 - PDF scan không có text layer chỉ được lưu, chưa OCR từng trang. Ảnh Telegram được phân tích bằng model có khả năng nhìn ảnh.
 - Nội dung trang web phụ thuộc quyền truy cập; trang yêu cầu đăng nhập hoặc render hoàn toàn bằng JavaScript có thể chỉ lưu được URL.
 - File gốc hiện được sao lưu trên ổ đĩa của máy chạy bot. Khi chạy production cần volume bền vững hoặc object storage.
-- Bot chưa có lệnh xóa dữ liệu để tránh thao tác xóa nhầm. Có thể bổ sung quy trình xác nhận ở giai đoạn tiếp theo.
+- Bot chưa hỗ trợ xóa hàng loạt hoặc khôi phục mục đã xóa.

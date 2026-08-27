@@ -5,10 +5,17 @@ import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import FSInputFile, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from memory_bot.config import Settings
 from memory_bot.database import Database
@@ -55,6 +62,12 @@ class MemoryBot:
         self.router.message.register(self.show_id, Command("id"))
         self.router.message.register(self.find_command, Command("find"))
         self.router.message.register(self.recent_command, Command("recent"))
+        self.router.message.register(self.forget_command, Command("forget"))
+        self.router.callback_query.register(self.forget_pick, F.data.startswith("forget:pick:"))
+        self.router.callback_query.register(
+            self.forget_confirm, F.data.startswith("forget:confirm:")
+        )
+        self.router.callback_query.register(self.forget_cancel, F.data == "forget:cancel")
         self.router.message.register(self.handle_text, F.text)
         self.router.message.register(
             self.handle_media,
@@ -90,6 +103,7 @@ class MemoryBot:
             "Lệnh nhanh:\n"
             "/find <nội dung> — tìm trực tiếp\n"
             "/recent — xem 10 mục gần nhất\n"
+            "/forget <nội dung> — tìm và xóa an toàn\n"
             "/id — xem Telegram user ID\n"
             "/help — hướng dẫn"
         )
@@ -123,6 +137,114 @@ class MemoryBot:
             label = self._result_label(result)
             lines.append(f"{index}. {label} — {result.created_at:%d/%m/%Y %H:%M}")
         await message.answer("\n".join(lines))
+
+    async def forget_command(self, message: Message) -> None:
+        if not await self._guard(message) or not message.from_user:
+            return
+        query = (message.text or "").partition(" ")[2].strip()
+        if not query:
+            await message.answer("Cách dùng: /forget nội dung hoặc tên file cần xóa")
+            return
+        results = await self.memories.search(message.from_user.id, query, limit=5)
+        if not results:
+            await message.answer("Tôi không tìm thấy mục phù hợp để xóa.")
+            return
+
+        lines = ["Chọn đúng mục bạn muốn xóa:"]
+        buttons: list[list[InlineKeyboardButton]] = []
+        for index, result in enumerate(results, start=1):
+            lines.append(
+                f"{index}. {self._result_label(result)} — "
+                f"{result.created_at:%d/%m/%Y %H:%M}"
+            )
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"Chọn mục {index}", callback_data=f"forget:pick:{result.id}"
+                    )
+                ]
+            )
+        buttons.append([InlineKeyboardButton(text="Hủy", callback_data="forget:cancel")])
+        await message.answer(
+            "\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+    async def forget_pick(self, callback: CallbackQuery) -> None:
+        if not await self._guard_callback(callback) or not callback.data:
+            return
+        memory_id = self._forget_callback_uuid(callback.data, "pick")
+        if not memory_id:
+            await callback.answer("Yêu cầu không hợp lệ.", show_alert=True)
+            return
+        result = await self.database.get_memory(callback.from_user.id, memory_id)
+        if not result:
+            await callback.answer("Mục này không còn tồn tại.", show_alert=True)
+            return
+
+        await callback.answer()
+        if callback.message is not None:
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Xóa vĩnh viễn",
+                            callback_data=f"forget:confirm:{memory_id}",
+                        ),
+                        InlineKeyboardButton(text="Hủy", callback_data="forget:cancel"),
+                    ]
+                ]
+            )
+            await callback.message.edit_text(
+                f"Xác nhận xóa “{self._result_label(result)}”?\n"
+                "Nội dung và chỉ mục tìm kiếm liên quan sẽ bị xóa.",
+                reply_markup=keyboard,
+            )
+
+    async def forget_confirm(self, callback: CallbackQuery) -> None:
+        if not await self._guard_callback(callback) or not callback.data:
+            return
+        memory_id = self._forget_callback_uuid(callback.data, "confirm")
+        if not memory_id:
+            await callback.answer("Yêu cầu không hợp lệ.", show_alert=True)
+            return
+        result = await self.database.get_memory(callback.from_user.id, memory_id)
+        if not result:
+            await callback.answer("Mục này không còn tồn tại.", show_alert=True)
+            return
+
+        stored_paths = await self.database.delete_memory_tree(callback.from_user.id, memory_id)
+        for stored_path in stored_paths:
+            try:
+                self.storage.delete_file(stored_path)
+            except (OSError, ValueError):
+                logger.warning("Khong xoa duoc ban sao local %s", stored_path, exc_info=True)
+        await callback.answer("Đã xóa.")
+        if callback.message is not None:
+            await callback.message.edit_text(f"Đã xóa “{self._result_label(result)}” khỏi bộ nhớ.")
+
+    async def forget_cancel(self, callback: CallbackQuery) -> None:
+        if not await self._guard_callback(callback):
+            return
+        await callback.answer("Đã hủy.")
+        if callback.message is not None:
+            await callback.message.edit_text("Đã hủy thao tác xóa.")
+
+    async def _guard_callback(self, callback: CallbackQuery) -> bool:
+        allowed = self.settings.allowed_telegram_user_ids
+        if not allowed or callback.from_user.id in allowed:
+            return True
+        await callback.answer("Tài khoản của bạn chưa được cấp quyền.", show_alert=True)
+        return False
+
+    @staticmethod
+    def _forget_callback_uuid(data: str, action: str) -> UUID | None:
+        prefix = f"forget:{action}:"
+        if not data.startswith(prefix):
+            return None
+        try:
+            return UUID(data.removeprefix(prefix))
+        except ValueError:
+            return None
 
     async def handle_text(self, message: Message) -> None:
         if not await self._guard(message) or not message.from_user or not message.text:

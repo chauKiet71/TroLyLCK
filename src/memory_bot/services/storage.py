@@ -35,3 +35,12 @@ class LocalStorage:
             raise ValueError("Telegram khong tra ve file_path")
         await bot.download_file(telegram_file.file_path, destination=destination)
         return destination
+
+    def delete_file(self, stored_path: str | Path) -> bool:
+        path = Path(stored_path).resolve()
+        if self.root not in path.parents:
+            raise ValueError("Duong dan xoa file khong an toan")
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True
