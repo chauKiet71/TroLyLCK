@@ -9,7 +9,5 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 
 RUN mkdir -p /app/data/files
-VOLUME ["/app/data"]
 
 CMD ["memory-bot"]
-
