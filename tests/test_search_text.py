@@ -18,3 +18,7 @@ def test_duplicate_terms_are_removed() -> None:
         "tháng",
         "8",
     ]
+
+
+def test_bank_alias_is_normalized_and_chat_filler_is_removed() -> None:
+    assert meaningful_search_terms("có mã qr vtb ko") == ["mã", "qr", "vietinbank"]

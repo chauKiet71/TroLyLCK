@@ -200,6 +200,56 @@ class Database:
         )
         return [self._to_result(row) for row in rows]
 
+    async def create_quick_message(
+        self, telegram_user_id: int, name: str, content: str
+    ) -> dict[str, Any] | None:
+        rows = await self._fetchall(
+            """
+            INSERT INTO quick_messages (telegram_user_id, name, content)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (telegram_user_id, (lower(name))) DO NOTHING
+            RETURNING *
+            """,
+            (telegram_user_id, name, content),
+        )
+        return rows[0] if rows else None
+
+    async def quick_message_name_exists(self, telegram_user_id: int, name: str) -> bool:
+        rows = await self._fetchall(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM quick_messages
+                WHERE telegram_user_id = %s AND lower(name) = lower(%s)
+            ) AS exists
+            """,
+            (telegram_user_id, name),
+        )
+        return bool(rows[0]["exists"])
+
+    async def list_quick_messages(self, telegram_user_id: int) -> list[dict[str, Any]]:
+        return await self._fetchall(
+            """
+            SELECT id, name, content, created_at, updated_at
+            FROM quick_messages
+            WHERE telegram_user_id = %s
+            ORDER BY lower(name), created_at
+            """,
+            (telegram_user_id,),
+        )
+
+    async def get_quick_message(
+        self, telegram_user_id: int, quick_message_id: UUID
+    ) -> dict[str, Any] | None:
+        rows = await self._fetchall(
+            """
+            SELECT id, name, content, created_at, updated_at
+            FROM quick_messages
+            WHERE telegram_user_id = %s AND id = %s
+            """,
+            (telegram_user_id, quick_message_id),
+        )
+        return rows[0] if rows else None
+
     async def get_memory(
         self, telegram_user_id: int, memory_id: UUID
     ) -> SearchResult | None:

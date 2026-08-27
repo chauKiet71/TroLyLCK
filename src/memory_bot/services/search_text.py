@@ -15,8 +15,10 @@ VIETNAMESE_QUERY_STOP_WORDS = {
     "giúp",
     "gửi",
     "hình",
+    "k",
     "khi",
     "không",
+    "ko",
     "là",
     "lại",
     "lúc",
@@ -40,12 +42,17 @@ VIETNAMESE_QUERY_STOP_WORDS = {
     "được",
 }
 
+SEARCH_TERM_ALIASES = {
+    "vtb": "vietinbank",
+}
+
 
 def meaningful_search_terms(text: str, max_terms: int = 12) -> list[str]:
     """Keep content words and remove conversational/question filler."""
     tokens = re.findall(r"[^\W_]+", text.casefold(), flags=re.UNICODE)
     terms: list[str] = []
     for token in tokens:
+        token = SEARCH_TERM_ALIASES.get(token, token)
         if token in VIETNAMESE_QUERY_STOP_WORDS or token in terms:
             continue
         terms.append(token)

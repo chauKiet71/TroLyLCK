@@ -94,6 +94,24 @@ SCHEMA_STATEMENTS = (
     """,
     "CREATE INDEX IF NOT EXISTS memory_chunks_memory_idx ON memory_chunks (memory_id)",
     """
+    CREATE TABLE IF NOT EXISTS quick_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        telegram_user_id BIGINT NOT NULL,
+        name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 64),
+        content TEXT NOT NULL CHECK (char_length(content) BETWEEN 1 AND 4096),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS quick_messages_user_name_unique_idx
+    ON quick_messages (telegram_user_id, lower(name))
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS quick_messages_user_created_idx
+    ON quick_messages (telegram_user_id, created_at)
+    """,
+    """
     CREATE INDEX IF NOT EXISTS memory_chunks_embedding_hnsw
     ON memory_chunks USING hnsw (embedding vector_cosine_ops)
     """,

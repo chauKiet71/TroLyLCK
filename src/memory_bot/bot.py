@@ -8,7 +8,9 @@ from typing import Any
 from uuid import UUID
 
 from aiogram import Bot, F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     FSInputFile,
@@ -26,6 +28,11 @@ from memory_bot.services.storage import LocalStorage
 from memory_bot.types import MemoryCreate, SearchResult
 
 logger = logging.getLogger(__name__)
+
+
+class QuickMessageForm(StatesGroup):
+    name = State()
+    content = State()
 
 
 @dataclass(slots=True)
@@ -63,11 +70,21 @@ class MemoryBot:
         self.router.message.register(self.find_command, Command("find"))
         self.router.message.register(self.recent_command, Command("recent"))
         self.router.message.register(self.forget_command, Command("forget"))
+        self.router.message.register(self.quickadd_command, Command("quickadd"))
+        self.router.message.register(self.quick_command, Command("quick"))
+        self.router.message.register(self.cancel_command, Command("cancel"))
         self.router.callback_query.register(self.forget_pick, F.data.startswith("forget:pick:"))
         self.router.callback_query.register(
             self.forget_confirm, F.data.startswith("forget:confirm:")
         )
         self.router.callback_query.register(self.forget_cancel, F.data == "forget:cancel")
+        self.router.callback_query.register(self.quick_send, F.data.startswith("quick:send:"))
+        self.router.message.register(
+            self.quick_name_step, StateFilter(QuickMessageForm.name), F.text
+        )
+        self.router.message.register(
+            self.quick_content_step, StateFilter(QuickMessageForm.content), F.text
+        )
         self.router.message.register(self.handle_text, F.text)
         self.router.message.register(
             self.handle_media,
@@ -104,6 +121,9 @@ class MemoryBot:
             "/find <nội dung> — tìm trực tiếp\n"
             "/recent — xem 10 mục gần nhất\n"
             "/forget <nội dung> — tìm và xóa an toàn\n"
+            "/quickadd — tạo tin nhắn nhanh\n"
+            "/quick — mở danh sách tin nhắn nhanh\n"
+            "/cancel — hủy thao tác đang thực hiện\n"
             "/id — xem Telegram user ID\n"
             "/help — hướng dẫn"
         )
@@ -137,6 +157,123 @@ class MemoryBot:
             label = self._result_label(result)
             lines.append(f"{index}. {label} — {result.created_at:%d/%m/%Y %H:%M}")
         await message.answer("\n".join(lines))
+
+    async def quickadd_command(self, message: Message, state: FSMContext) -> None:
+        if not await self._guard(message):
+            return
+        await state.clear()
+        await state.set_state(QuickMessageForm.name)
+        await message.answer("Hãy nhập tên cho tin nhắn nhanh (tối đa 64 ký tự).")
+
+    async def quick_name_step(self, message: Message, state: FSMContext) -> None:
+        if not await self._guard(message) or not message.from_user:
+            return
+        try:
+            name = self._validated_quick_name(message.text or "")
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
+        if await self.database.quick_message_name_exists(message.from_user.id, name):
+            await message.answer("Tên này đã tồn tại. Hãy nhập một tên khác.")
+            return
+        await state.update_data(quick_name=name)
+        await state.set_state(QuickMessageForm.content)
+        await message.answer(f"Hãy nhập nội dung cho “{name}” (tối đa 4.096 ký tự).")
+
+    async def quick_content_step(self, message: Message, state: FSMContext) -> None:
+        if not await self._guard(message) or not message.from_user:
+            return
+        try:
+            content = self._validated_quick_content(message.text or "")
+        except ValueError as exc:
+            await message.answer(str(exc))
+            return
+        data = await state.get_data()
+        name = data.get("quick_name")
+        if not isinstance(name, str):
+            await state.clear()
+            await message.answer("Phiên tạo tin nhắn đã hết hạn. Hãy dùng /quickadd để thử lại.")
+            return
+        created = await self.database.create_quick_message(
+            message.from_user.id, name, content
+        )
+        await state.clear()
+        if not created:
+            await message.answer("Tên này vừa được sử dụng. Hãy dùng /quickadd với tên khác.")
+            return
+        await message.answer(f"Đã lưu tin nhắn nhanh “{name}”. Dùng /quick để gửi.")
+
+    async def quick_command(self, message: Message) -> None:
+        if not await self._guard(message) or not message.from_user:
+            return
+        templates = await self.database.list_quick_messages(message.from_user.id)
+        if not templates:
+            await message.answer("Bạn chưa có tin nhắn nhanh. Dùng /quickadd để tạo.")
+            return
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=template["name"], callback_data=f"quick:send:{template['id']}"
+                )
+            ]
+            for template in templates
+        ]
+        await message.answer(
+            "Chọn tin nhắn muốn gửi:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
+
+    async def quick_send(self, callback: CallbackQuery) -> None:
+        if not await self._guard_callback(callback) or not callback.data:
+            return
+        template_id = self._quick_callback_uuid(callback.data)
+        if not template_id:
+            await callback.answer("Yêu cầu không hợp lệ.", show_alert=True)
+            return
+        template = await self.database.get_quick_message(callback.from_user.id, template_id)
+        if not template:
+            await callback.answer("Tin nhắn này không còn tồn tại.", show_alert=True)
+            return
+        await callback.answer()
+        if callback.message is not None:
+            await callback.message.answer(template["content"])
+
+    async def cancel_command(self, message: Message, state: FSMContext) -> None:
+        if not await self._guard(message):
+            return
+        if not await state.get_state():
+            await message.answer("Hiện không có thao tác nào cần hủy.")
+            return
+        await state.clear()
+        await message.answer("Đã hủy thao tác hiện tại.")
+
+    @staticmethod
+    def _validated_quick_name(value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Tên tin nhắn không được để trống.")
+        if len(name) > 64:
+            raise ValueError("Tên tin nhắn không được dài quá 64 ký tự.")
+        return name
+
+    @staticmethod
+    def _validated_quick_content(value: str) -> str:
+        content = value.strip()
+        if not content:
+            raise ValueError("Nội dung tin nhắn không được để trống.")
+        if len(content) > 4096:
+            raise ValueError("Nội dung tin nhắn không được dài quá 4.096 ký tự.")
+        return content
+
+    @staticmethod
+    def _quick_callback_uuid(data: str) -> UUID | None:
+        prefix = "quick:send:"
+        if not data.startswith(prefix):
+            return None
+        try:
+            return UUID(data.removeprefix(prefix))
+        except ValueError:
+            return None
 
     async def forget_command(self, message: Message) -> None:
         if not await self._guard(message) or not message.from_user:

@@ -12,6 +12,7 @@ Trợ lý Telegram cá nhân có thể ghi nhớ tin nhắn, hình ảnh, tài l
 - Tìm kiếm kết hợp `pgvector` (ngữ nghĩa) và PostgreSQL full-text/keyword.
 - Tìm và xóa từng mục bằng `/forget` với hai bước chọn và xác nhận; bản sao file cục bộ
   liên quan cũng được dọn an toàn.
+- Tạo mẫu tin nhắn theo từng bước bằng `/quickadd` và gửi lại nhanh từ danh sách `/quick`.
 - Tự chạy migration idempotent khi khởi động: extension, bảng, cột và index còn thiếu sẽ được tạo.
 - Cô lập dữ liệu theo Telegram user ID.
 
@@ -72,6 +73,9 @@ Bot đang dùng long polling, vì vậy không cần domain hay webhook cho MVP.
 - `/find báo cáo tài chính tháng 8` → buộc tìm kiếm, bỏ qua bước phân loại ý định.
 - `/recent` → xem 10 mục gần nhất.
 - `/forget báo cáo tài chính tháng 8` → chọn một kết quả rồi xác nhận trước khi xóa vĩnh viễn.
+- `/quickadd` → nhập tên, sau đó nhập nội dung để lưu ngay một mẫu tin nhắn.
+- `/quick` → mở danh sách mẫu và bấm tên để bot gửi nội dung.
+- `/cancel` → hủy luồng tạo mẫu đang thực hiện.
 
 ## Chạy bằng Docker
 
@@ -95,3 +99,4 @@ ruff check .
 - Nội dung trang web phụ thuộc quyền truy cập; trang yêu cầu đăng nhập hoặc render hoàn toàn bằng JavaScript có thể chỉ lưu được URL.
 - File gốc hiện được sao lưu trên ổ đĩa của máy chạy bot. Khi chạy production cần volume bền vững hoặc object storage.
 - Bot chưa hỗ trợ xóa hàng loạt hoặc khôi phục mục đã xóa.
+- Tin nhắn nhanh chưa hỗ trợ sửa hoặc xóa mẫu.
