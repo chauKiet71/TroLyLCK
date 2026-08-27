@@ -1,0 +1,20 @@
+from memory_bot.services.search_text import meaningful_search_terms
+
+
+def test_question_words_are_removed() -> None:
+    assert meaningful_search_terms("Điện thoại iphone x mua lúc nào") == [
+        "điện",
+        "thoại",
+        "iphone",
+        "x",
+        "mua",
+    ]
+
+
+def test_duplicate_terms_are_removed() -> None:
+    assert meaningful_search_terms("báo cáo báo cáo tháng 8 ở đâu") == [
+        "báo",
+        "cáo",
+        "tháng",
+        "8",
+    ]
