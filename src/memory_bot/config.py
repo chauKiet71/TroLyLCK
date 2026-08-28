@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_chat_model: str = "gpt-5-mini"
     openai_embedding_model: str = "text-embedding-3-small"
+    bot_instruction_path: Path | None = None
     allowed_telegram_user_ids: Annotated[frozenset[int], NoDecode] = Field(
         default_factory=frozenset
     )

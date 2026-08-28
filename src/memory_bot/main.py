@@ -31,6 +31,7 @@ async def main() -> None:
         settings.openai_api_key,
         settings.openai_chat_model,
         settings.openai_embedding_model,
+        instruction_path=settings.bot_instruction_path,
     )
     memory_service = MemoryService(database, ai)
     application = MemoryBot(

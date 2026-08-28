@@ -10,11 +10,13 @@ VIETNAMESE_QUERY_STOP_WORDS = {
     "cho",
     "chưa",
     "cái",
+    "cần",
     "của",
     "do",
     "giúp",
     "gửi",
     "hình",
+    "gì",
     "k",
     "khi",
     "không",
@@ -34,7 +36,9 @@ VIETNAMESE_QUERY_STOP_WORDS = {
     "thế",
     "tìm",
     "tôi",
+    "trí",
     "vậy",
+    "vị",
     "với",
     "đã",
     "đâu",
@@ -43,6 +47,7 @@ VIETNAMESE_QUERY_STOP_WORDS = {
 }
 
 SEARCH_TERM_ALIASES = {
+    "skill": "qualification",
     "vtb": "vietinbank",
 }
 

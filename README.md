@@ -44,9 +44,15 @@ TELEGRAM_BOT_TOKEN=token_lay_tu_BotFather
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require&channel_binding=require
 OPENAI_API_KEY=sk-...
 ALLOWED_TELEGRAM_USER_IDS=123456789
+BOT_INSTRUCTION_PATH=./config/instruction_bot_tele.txt
 ```
 
 `OPENAI_API_KEY` có thể để trống, nhưng khi đó bot chỉ tìm bằng từ khóa, không hiểu nội dung ảnh và câu trả lời sẽ đơn giản hơn. Nên đặt `ALLOWED_TELEGRAM_USER_IDS` để người khác không thể dùng bot và đọc bộ nhớ của bạn. Gửi `/id` cho bot để xem ID sau lần chạy đầu; trước đó có thể tạm để danh sách trống.
+
+`BOT_INSTRUCTION_PATH` là tùy chọn. Khi bỏ trống, bot dùng instruction mặc định đi kèm
+ứng dụng. Để tinh chỉnh, sao chép file `src/memory_bot/instruction_bot_tele.txt` ra một
+vị trí riêng, sửa nội dung, đặt biến này tới file đó rồi khởi động lại bot. Instruction
+được gửi riêng ở lớp hệ thống; tin nhắn Telegram và dữ liệu tìm kiếm không thể thay thế nó.
 
 ## Chạy bot
 
@@ -81,10 +87,15 @@ Bot đang dùng long polling, vì vậy không cần domain hay webhook cho MVP.
 
 ```powershell
 docker build -t telegram-memory-agent .
-docker run --env-file .env -v memory-agent-data:/app/data telegram-memory-agent
+docker run --env-file .env `
+  -v memory-agent-data:/app/data `
+  -v ./config:/app/config:ro `
+  telegram-memory-agent
 ```
 
 Volume `/app/data` phải được giữ lại khi nâng cấp container. Với triển khai serverless hoặc nhiều instance, nên thay `LocalStorage` bằng S3/R2/MinIO; Neon không nên dùng để chứa toàn bộ binary file lớn.
+Nếu dùng instruction tùy chỉnh trong Docker, đặt `BOT_INSTRUCTION_PATH=/app/config/instruction_bot_tele.txt`
+và lưu file tại `./config/instruction_bot_tele.txt` trên máy chủ.
 
 ## Kiểm thử
 
