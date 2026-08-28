@@ -18,6 +18,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     Message,
 )
+from psycopg import OperationalError
 
 from memory_bot.config import Settings
 from memory_bot.database import Database
@@ -386,6 +387,18 @@ class MemoryBot:
     async def handle_text(self, message: Message) -> None:
         if not await self._guard(message) or not message.from_user or not message.text:
             return
+        try:
+            await self._handle_text(message)
+        except OperationalError:
+            logger.exception("Ket noi database bi gian doan khi xu ly tin nhan van ban")
+            await message.answer(
+                "Kết nối bộ nhớ vừa bị gián đoạn nên tôi chưa thể xác nhận đã lưu, ông chủ ạ. "
+                "Vui lòng thử lại sau ít phút."
+            )
+
+    async def _handle_text(self, message: Message) -> None:
+        assert message.from_user is not None
+        assert message.text is not None
         text = message.text.strip()
         urls = extract_urls(text)
         explicit_intent = self.ai.explicit_intent(text)

@@ -23,6 +23,7 @@ class Database:
             min_size=1,
             max_size=6,
             open=False,
+            check=AsyncConnectionPool.check_connection,
             kwargs={"row_factory": dict_row},
         )
 
