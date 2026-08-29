@@ -25,6 +25,7 @@ from memory_bot.database import Database
 from memory_bot.services.ai import AIService
 from memory_bot.services.links import LinkReader, extract_urls
 from memory_bot.services.memory import MemoryService
+from memory_bot.services.message_routing import explicit_save_content
 from memory_bot.services.storage import LocalStorage
 from memory_bot.types import MemoryCreate, SearchResult
 
@@ -400,26 +401,18 @@ class MemoryBot:
         assert message.from_user is not None
         assert message.text is not None
         text = message.text.strip()
-        urls = extract_urls(text)
-        explicit_intent = self.ai.explicit_intent(text)
-        if explicit_intent:
-            intent = explicit_intent
-        else:
-            intent = "save" if urls else await self.ai.detect_intent(text)
-
-        if intent == "search":
-            await self.database.create_memory(
-                MemoryCreate(
-                    telegram_user_id=message.from_user.id,
-                    telegram_chat_id=message.chat.id,
-                    telegram_message_id=message.message_id,
-                    kind="query",
-                    text_content=text,
-                    searchable=False,
-                )
-            )
-            await self._answer_search(message, text)
+        save_content = explicit_save_content(message.text)
+        if save_content is None:
+            await self._answer_chat(message, text)
             return
+        if not save_content:
+            await message.answer("Hãy nhập nội dung phía sau ‘đây là’, ông chủ nhé.")
+            return
+        await self._save_text(message, save_content)
+
+    async def _save_text(self, message: Message, text: str) -> None:
+        assert message.from_user is not None
+        urls = extract_urls(text)
 
         memory = await self.database.create_memory(
             MemoryCreate(
@@ -442,7 +435,7 @@ class MemoryBot:
                 f"Đã lưu tin nhắn và đọc được {link_success}/{len(urls)} đường link."
             )
         else:
-            await message.answer("Đã ghi nhớ thông tin này.")
+            await message.answer("Đã ghi nhớ thông tin này, ông chủ!")
 
     async def _ingest_link(self, message: Message, parent_id: Any, url: str) -> bool:
         assert message.from_user is not None
@@ -541,6 +534,23 @@ class MemoryBot:
         answer = await self.ai.answer(query, results)
         await status.edit_text(answer)
 
+        await self._send_search_attachments(message, results)
+
+    async def _answer_chat(self, message: Message, question: str) -> None:
+        if not message.from_user:
+            return
+        status = await message.answer("Tôi đang suy nghĩ…")
+        results = await self.memories.search(
+            message.from_user.id, question, self.settings.search_result_limit
+        )
+        answer = await self.ai.answer_general(question, results)
+        await status.edit_text(answer)
+
+        await self._send_search_attachments(message, results)
+
+    async def _send_search_attachments(
+        self, message: Message, results: list[SearchResult]
+    ) -> None:
         sent: set[str] = set()
         for result in results[:3]:
             if not result.telegram_file_id or result.telegram_file_id in sent:
