@@ -3,10 +3,8 @@ from __future__ import annotations
 import base64
 import logging
 import mimetypes
-import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
 
 from openai import AsyncOpenAI, AuthenticationError
 
@@ -16,13 +14,6 @@ from memory_bot.types import SearchResult
 logger = logging.getLogger(__name__)
 
 DEFAULT_INSTRUCTION_PATH = Path(__file__).resolve().parents[1] / "instruction_bot_tele.txt"
-
-INTENT_INSTRUCTIONS = """
-Bạn là bộ định tuyến cho bot bộ nhớ cá nhân.
-Trả về đúng một từ SEARCH nếu người dùng đang hỏi, muốn tìm, muốn lấy lại
-hoặc muốn kiểm tra thông tin/tài liệu đã gửi trước đây.
-Trả về đúng một từ SAVE nếu đây là thông tin người dùng đang cung cấp để lưu.
-"""
 
 IMAGE_INSTRUCTIONS = """
 Mô tả chi tiết ảnh bằng tiếng Việt để có thể tìm lại sau này.
@@ -55,24 +46,6 @@ class AIService:
         self.instructions = path.read_text(encoding="utf-8").strip()
         if not self.instructions:
             raise ValueError(f"Bot instruction không được để trống: {path}")
-
-    async def detect_intent(self, text: str) -> Literal["search", "save"]:
-        explicit_intent = self.explicit_intent(text)
-        if explicit_intent:
-            return explicit_intent
-        if not self.client:
-            return self._heuristic_intent(text)
-        try:
-            response = await self.client.responses.create(
-                model=self.chat_model,
-                instructions=self._task_instructions(INTENT_INSTRUCTIONS),
-                input=f"Tin nhắn người dùng:\n{text}",
-            )
-            return "search" if response.output_text.strip().upper().startswith("SEARCH") else "save"
-        except Exception as exc:
-            self._handle_api_error(exc)
-            logger.exception("Khong the phan loai y dinh, dung heuristic")
-            return self._heuristic_intent(text)
 
     async def embed(self, texts: Sequence[str]) -> list[list[float] | None]:
         if not texts:
@@ -149,18 +122,6 @@ class AIService:
             logger.exception("Khong tao duoc cau tra loi")
             return self._fallback_answer(results)
 
-    @staticmethod
-    def explicit_intent(text: str) -> Literal["search", "save"] | None:
-        """Apply the user's explicit Vietnamese routing phrases before AI inference."""
-        normalized = text.casefold()
-        if re.search(r"\bđây\s+là\b", normalized, flags=re.UNICODE):
-            return "save"
-
-        tokens = set(re.findall(r"[^\W_]+", normalized, flags=re.UNICODE))
-        if tokens.intersection({"k", "ko", "không"}):
-            return "search"
-        return None
-
     def _handle_api_error(self, error: Exception) -> None:
         if isinstance(error, AuthenticationError):
             # Avoid repeated slow 401 calls for every Telegram message.
@@ -173,29 +134,6 @@ class AIService:
             f"{self.instructions}\n\n"
             f"XIV. QUY TẮC CHO TÁC VỤ HIỆN TẠI\n{task_section}"
         )
-
-    @staticmethod
-    def _heuristic_intent(text: str) -> Literal["search", "save"]:
-        normalized = text.casefold().strip()
-        question_markers = (
-            "?",
-            "đúng không",
-            "ở đâu",
-            "lúc nào",
-            "khi nào",
-            "bao nhiêu",
-            "tìm ",
-            "gửi lại",
-            "gửi tôi",
-            "đưa tôi",
-            "lấy lại",
-            "xem lại",
-            "cho tôi",
-            "có file",
-            "nhớ không",
-            "hình như",
-        )
-        return "search" if any(marker in normalized for marker in question_markers) else "save"
 
     @staticmethod
     def _fallback_answer(results: Sequence[SearchResult]) -> str:
