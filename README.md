@@ -1,9 +1,14 @@
-# Telegram Memory Agent
+# Telegram General Memory Assistant
 
-Trợ lý Telegram cá nhân có thể ghi nhớ tin nhắn, hình ảnh, tài liệu, media và đường link; sau đó tìm lại bằng câu hỏi tự nhiên. Metadata, nội dung trích xuất và vector được lưu trên Neon PostgreSQL. File Telegram được giữ bằng `file_id` để gửi lại nhanh, đồng thời có một bản sao trong thư mục `data/files`.
+Trợ lý Telegram cá nhân có thể trả lời câu hỏi tổng quát, ưu tiên thông tin liên quan trong bộ
+nhớ của người dùng, đồng thời ghi nhớ tin nhắn, hình ảnh, tài liệu, media và đường link.
+Metadata, nội dung trích xuất và vector được lưu trên Neon PostgreSQL. File Telegram được giữ
+bằng `file_id` để gửi lại nhanh, đồng thời có một bản sao trong thư mục `data/files`.
 
 ## Khả năng hiện tại
 
+- Trả lời câu hỏi tổng quát bằng AI và tự động dùng dữ liệu liên quan trong bộ nhớ trước.
+- Chỉ lưu tin nhắn văn bản khi tin nhắn bắt đầu bằng `đây là`; tiền tố này không được lưu.
 - Lưu và tìm lại tin nhắn văn bản.
 - Phát hiện, tải và đọc nội dung các URL công khai; chặn URL mạng nội bộ để tránh SSRF.
 - Lưu ảnh và dùng AI để mô tả ảnh, OCR chữ/số nhìn thấy.
@@ -47,7 +52,10 @@ ALLOWED_TELEGRAM_USER_IDS=123456789
 BOT_INSTRUCTION_PATH=./config/instruction_bot_tele.txt
 ```
 
-`OPENAI_API_KEY` có thể để trống, nhưng khi đó bot chỉ tìm bằng từ khóa, không hiểu nội dung ảnh và câu trả lời sẽ đơn giản hơn. Nên đặt `ALLOWED_TELEGRAM_USER_IDS` để người khác không thể dùng bot và đọc bộ nhớ của bạn. Gửi `/id` cho bot để xem ID sau lần chạy đầu; trước đó có thể tạm để danh sách trống.
+`OPENAI_API_KEY` cần thiết để trả lời câu hỏi tổng quát, tìm kiếm ngữ nghĩa và hiểu nội dung
+ảnh. Nếu để trống, bot vẫn có thể tìm từ khóa trong dữ liệu đã lưu nhưng không thể trả lời kiến
+thức chung. Nên đặt `ALLOWED_TELEGRAM_USER_IDS` để người khác không thể dùng bot và đọc bộ nhớ
+của bạn. Gửi `/id` cho bot để xem ID sau lần chạy đầu; trước đó có thể tạm để danh sách trống.
 
 `BOT_INSTRUCTION_PATH` là tùy chọn. Khi bỏ trống, bot dùng instruction mặc định đi kèm
 ứng dụng. Để tinh chỉnh, sao chép file `src/memory_bot/instruction_bot_tele.txt` ra một
@@ -70,12 +78,14 @@ Bot đang dùng long polling, vì vậy không cần domain hay webhook cho MVP.
 
 ## Cách sử dụng
 
-- Gửi một câu như `Doanh thu tháng 8 là 500 triệu` → bot ghi nhớ.
-- Tin nhắn có cụm `đây là` (không phân biệt chữ hoa/thường) → luôn ghi nhớ.
-- Tin nhắn có từ độc lập `k`, `ko` hoặc `không` → tìm trong kho, trừ khi đã có `đây là`.
+- Gửi `đây là Doanh thu tháng 8 là 500 triệu` → bot chỉ lưu phần nội dung sau `đây là`.
+- Tiền tố `đây là` phải nằm ở đầu tin nhắn, không phân biệt chữ hoa/thường.
+- Mọi tin nhắn văn bản khác → bot tìm bộ nhớ liên quan trước rồi trả lời bằng AI.
+- Mỗi tin nhắn là một lượt độc lập; bot không giữ lịch sử hội thoại giữa các câu hỏi.
 - Gửi PDF/Excel/Word/ảnh → bot lưu file và lập chỉ mục nội dung đọc được.
-- Gửi một URL → bot lưu URL, tiêu đề và nội dung trang.
-- Hỏi `Hình như tôi có báo cáo tài chính tháng 8 đúng không?` → bot trả lời và gửi lại file phù hợp.
+- Gửi `đây là https://example.com` → bot lưu URL, tiêu đề và nội dung trang.
+- Hỏi `Thủ đô Pháp là gì?` → bot trả lời bằng kiến thức chung nếu bộ nhớ không có dữ liệu liên quan.
+- Hỏi `Tôi thích uống gì?` → bot ưu tiên sở thích đã lưu trước khi dùng kiến thức chung.
 - `/find báo cáo tài chính tháng 8` → buộc tìm kiếm, bỏ qua bước phân loại ý định.
 - `/recent` → xem 10 mục gần nhất.
 - `/forget báo cáo tài chính tháng 8` → chọn một kết quả rồi xác nhận trước khi xóa vĩnh viễn.

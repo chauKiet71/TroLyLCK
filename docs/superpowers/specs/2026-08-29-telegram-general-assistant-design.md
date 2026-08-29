@@ -15,7 +15,8 @@ This phase includes:
 - Explicit saving only for messages beginning with `đây là`, case-insensitively and allowing
   leading whitespace.
 - Removal of the save prefix and surrounding whitespace before persistence and indexing.
-- Existing media, link, quick-message, deletion, recent-memory, and `/find` behavior.
+- Existing media, quick-message, deletion, recent-memory, and `/find` behavior. URL ingestion
+  remains available inside an explicit `đây là` save.
 - Stateless turns: no transcript or conversational session history is sent to the model.
 
 This phase excludes web search, schedules, reminders, external tools, autonomous actions,
@@ -74,9 +75,10 @@ The `/find` command remains memory-only and does not fall back to general knowle
 
 ## Data and Privacy
 
-Only explicit `đây là` messages, media, links, and existing command-specific records are stored.
-Ordinary general questions are not persisted as memories. Retrieval remains scoped to the
-Telegram user ID. No conversation transcript is introduced.
+Only explicit `đây là` text messages, media, and existing command-specific records are stored.
+URLs are ingested only when included in an explicit save. Ordinary general questions are not
+persisted as memories. Retrieval remains scoped to the Telegram user ID. No conversation
+transcript is introduced.
 
 ## Error Handling
 
